@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'database/database_helper.dart'; // ✅ ЭТОТ ИМПОРТ ОБЯЗАТЕЛЕН!
-import 'screens/add_book_screen.dart'; // ✅ И ЭТОТ ТОЖЕ!
+import 'database/database_helper.dart';
+import 'screens/add_book_screen.dart';
+import 'screens/edit_book_screen.dart';
 
 void main() {
   runApp(const HomeLibraryApp());
@@ -35,10 +36,10 @@ class _BookListScreenState extends State<BookListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBooks(); // ✅ Загружаем книги при старте
+    _loadBooks();
   }
 
-  // ✅ Метод загрузки из БД
+  // Загрузка книг из базы данных
   Future<void> _loadBooks() async {
     setState(() => _isLoading = true);
     try {
@@ -47,14 +48,14 @@ class _BookListScreenState extends State<BookListScreen> {
         _books = books;
         _isLoading = false;
       });
-      print('📚 Загружено книг: ${books.length}'); // Для отладки
+      print('📚 Загружено книг: ${books.length}');
     } catch (e) {
       print('❌ Ошибка загрузки: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  // ✅ Метод удаления
+  // Удаление книги
   Future<void> _deleteBook(int id) async {
     await _dbHelper.deleteBook(id);
     _loadBooks();
@@ -62,6 +63,18 @@ class _BookListScreenState extends State<BookListScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('🗑️ Книга удалена')));
+    }
+  }
+
+  // Редактирование книги
+  Future<void> _editBook(Map<String, dynamic> book) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => EditBookScreen(book: book)),
+    );
+
+    if (result == true && mounted) {
+      _loadBooks();
     }
   }
 
@@ -103,11 +116,7 @@ class _BookListScreenState extends State<BookListScreen> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('✏️ Скоро!')),
-                            );
-                          },
+                          onPressed: () => _editBook(book),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),

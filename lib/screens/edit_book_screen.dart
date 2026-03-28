@@ -1,40 +1,75 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import '../services/api_service.dart';
-import '../models/book.dart';
-import 'scanner_screen.dart';
-import 'book_selection_screen.dart';
 import 'genres_screen.dart';
 
-class AddBookScreen extends StatefulWidget {
-  const AddBookScreen({super.key});
+class EditBookScreen extends StatefulWidget {
+  final Map<String, dynamic> book;
+
+  const EditBookScreen({super.key, required this.book});
 
   @override
-  State<AddBookScreen> createState() => _AddBookScreenState();
+  State<EditBookScreen> createState() => _EditBookScreenState();
 }
 
-class _AddBookScreenState extends State<AddBookScreen> {
+class _EditBookScreenState extends State<EditBookScreen> {
   final _formKey = GlobalKey<FormState>();
   final _dbHelper = DatabaseHelper.instance;
-  final _apiService = ApiService();
-  bool _isLoadingFromApi = false;
 
   // Контроллеры для полей ввода
-  final _titleController = TextEditingController();
-  final _authorController = TextEditingController();
-  final _isbnController = TextEditingController();
-  final _publisherController = TextEditingController();
-  final _yearController = TextEditingController();
-  final _pagesController = TextEditingController();
-  final _genreController = TextEditingController();
-  final _seriesController = TextEditingController();
-  final _seriesNumberController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _coverImageController = TextEditingController();
-  final _tocController = TextEditingController();
-  final _notesController = TextEditingController();
+  late TextEditingController _titleController;
+  late TextEditingController _authorController;
+  late TextEditingController _isbnController;
+  late TextEditingController _publisherController;
+  late TextEditingController _yearController;
+  late TextEditingController _pagesController;
+  late TextEditingController _genreController;
+  late TextEditingController _seriesController;
+  late TextEditingController _seriesNumberController;
+  late TextEditingController _locationController;
+  late TextEditingController _coverImageController;
+  late TextEditingController _tocController;
+  late TextEditingController _notesController;
 
   String _selectedStatus = 'new';
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Заполняем контроллеры текущими данными книги
+    _titleController = TextEditingController(text: widget.book['title'] ?? '');
+    _authorController = TextEditingController(
+      text: widget.book['author'] ?? '',
+    );
+    _isbnController = TextEditingController(text: widget.book['isbn'] ?? '');
+    _publisherController = TextEditingController(
+      text: widget.book['publisher'] ?? '',
+    );
+    _yearController = TextEditingController(
+      text: widget.book['year']?.toString() ?? '',
+    );
+    _pagesController = TextEditingController(
+      text: widget.book['pages']?.toString() ?? '',
+    );
+    _genreController = TextEditingController(text: widget.book['genre'] ?? '');
+    _seriesController = TextEditingController(
+      text: widget.book['series'] ?? '',
+    );
+    _seriesNumberController = TextEditingController(
+      text: widget.book['series_number']?.toString() ?? '',
+    );
+    _locationController = TextEditingController(
+      text: widget.book['location'] ?? '',
+    );
+    _coverImageController = TextEditingController(
+      text: widget.book['cover_image'] ?? '',
+    );
+    _tocController = TextEditingController(
+      text: widget.book['table_of_contents'] ?? '',
+    );
+    _notesController = TextEditingController(text: widget.book['notes'] ?? '');
+    _selectedStatus = widget.book['status'] ?? 'new';
+  }
 
   @override
   void dispose() {
@@ -54,175 +89,13 @@ class _AddBookScreenState extends State<AddBookScreen> {
     super.dispose();
   }
 
-  // ✅ Сканирование ISBN и автозаполнение из API
-  Future<void> _scanAndFetch() async {
-    final isbn = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (_) => const ScannerScreen()),
-    );
-
-    if (isbn != null && mounted) {
-      setState(() {
-        _isbnController.text = isbn;
-        _isLoadingFromApi = true;
-      });
-
-      final book = await _apiService.fetchBookByIsbn(isbn);
-
-      if (book != null && mounted) {
-        _fillFormWithBook(book);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Данные загружены из онлайн-источников!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '⚠️ Книга не найдена. Попробуйте поиск по названию или заполните вручную.',
-              ),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-      }
-
-      if (mounted) {
-        setState(() => _isLoadingFromApi = false);
-      }
-    }
-  }
-
-  // ✅ Заполнение формы данными книги
-  void _fillFormWithBook(Book book) {
-    setState(() {
-      _titleController.text = book.title;
-      _authorController.text = book.author;
-      if (book.publisher != null) _publisherController.text = book.publisher!;
-      if (book.year != null) _yearController.text = book.year.toString();
-      if (book.coverImage != null)
-        _coverImageController.text = book.coverImage!;
-      if (book.genre != null) _genreController.text = book.genre!;
-      if (book.isbn != null) _isbnController.text = book.isbn!;
-      if (book.description != null) _tocController.text = book.description!;
-    });
-  }
-
-  // ✅ Поиск по названию и автору (со списком выбора!)
-  Future<void> _searchByTitle() async {
-    String title = _titleController.text;
-    String author = _authorController.text;
-
-    if (title.isEmpty && author.isEmpty) {
-      final result = await showDialog<Map<String, String>>(
-        context: context,
-        builder: (context) => _buildSearchDialog(),
-      );
-      if (result != null && mounted) {
-        title = result['title'] ?? '';
-        author = result['author'] ?? '';
-        if (title.isEmpty) return;
-      } else {
-        return;
-      }
-    }
-    await _performTitleSearch(title, author);
-  }
-
-  Future<void> _performTitleSearch(String title, String author) async {
-    setState(() => _isLoadingFromApi = true);
-    final books = await _apiService.searchBookByTitle(title, author);
-    setState(() => _isLoadingFromApi = false);
-
-    if (books.isEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Книги не найдены. Попробуйте другое название.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 4),
-        ),
-      );
-      return;
-    }
-
-    if (mounted) {
-      final selectedBook = await Navigator.push<Book>(
-        context,
-        MaterialPageRoute(builder: (_) => BookSelectionScreen(books: books)),
-      );
-      if (selectedBook != null && mounted) {
-        _fillFormWithBook(selectedBook);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Книга выбрана! Проверьте данные.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildSearchDialog() {
-    final titleController = TextEditingController();
-    final authorController = TextEditingController();
-
-    return AlertDialog(
-      title: const Text('🔍 Поиск книги'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: titleController,
-            decoration: const InputDecoration(
-              labelText: 'Название книги *',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.title),
-            ),
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: authorController,
-            decoration: const InputDecoration(
-              labelText: 'Автор (необязательно)',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (titleController.text.isNotEmpty) {
-              Navigator.pop(context, {
-                'title': titleController.text,
-                'author': authorController.text,
-              });
-            }
-          },
-          child: const Text('Поиск'),
-        ),
-      ],
-    );
-  }
-
-  // ✅ Сохранение книги в базу данных
-  Future<void> _saveBook() async {
+  // Сохранение изменений
+  Future<void> _saveChanges() async {
     if (_formKey.currentState!.validate()) {
-      final book = {
+      setState(() => _isLoading = true);
+
+      final updatedBook = {
+        'id': widget.book['id'],
         'isbn': _isbnController.text.isEmpty ? null : _isbnController.text,
         'title': _titleController.text,
         'author': _authorController.text,
@@ -253,20 +126,50 @@ class _AddBookScreenState extends State<AddBookScreen> {
             : _locationController.text,
         'status': _selectedStatus,
         'notes': _notesController.text.isEmpty ? null : _notesController.text,
-        'created_at': DateTime.now().toIso8601String(),
       };
 
-      await _dbHelper.createBook(book);
+      await _dbHelper.updateBook(updatedBook);
+
+      setState(() => _isLoading = false);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Книга добавлена!'),
+            content: Text('✅ Изменения сохранены!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
+      }
+    }
+  }
+
+  // Подтверждение удаления
+  Future<void> _confirmDelete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🗑️ Удалить книгу?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await _dbHelper.deleteBook(widget.book['id']);
+      if (mounted) {
+        Navigator.pop(context, true);
       }
     }
   }
@@ -275,11 +178,18 @@ class _AddBookScreenState extends State<AddBookScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('➕ Добавить книгу'),
+        title: const Text('✏️ Редактировать книгу'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Удалить книгу',
+            onPressed: _confirmDelete,
+          ),
+        ],
       ),
-      body: _isLoadingFromApi
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Form(
               key: _formKey,
@@ -288,64 +198,6 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // === ISBN И СКАНЕР ===
-                    Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              '📷 Сканирование / Поиск',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: _isbnController,
-                                    label: 'ISBN',
-                                    icon: Icons.bookmark,
-                                    keyboardType: TextInputType.number,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.teal,
-                                  ),
-                                  tooltip: 'Сканировать ISBN',
-                                  iconSize: 32,
-                                  onPressed: _scanAndFetch,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextButton.icon(
-                                onPressed: _searchByTitle,
-                                icon: const Icon(Icons.search, size: 18),
-                                label: const Text(
-                                  '🔍 Найти книгу по названию и автору',
-                                ),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.teal,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
                     // === ОБЯЗАТЕЛЬНЫЕ ПОЛЯ ===
                     _buildTextField(
                       controller: _titleController,
@@ -359,6 +211,15 @@ class _AddBookScreenState extends State<AddBookScreen> {
                       label: 'Автор *',
                       icon: Icons.person,
                       validator: (v) => v!.isEmpty ? 'Введите автора' : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // === ISBN ===
+                    _buildTextField(
+                      controller: _isbnController,
+                      label: 'ISBN',
+                      icon: Icons.bookmark,
+                      keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 16),
 
@@ -486,14 +347,13 @@ class _AddBookScreenState extends State<AddBookScreen> {
                     const SizedBox(height: 16),
 
                     // === ОГЛАВЛЕНИЕ ===
-                    _buildSectionTitle('📑 Оглавление (для сборников)'),
+                    _buildSectionTitle('📑 Оглавление'),
                     const SizedBox(height: 8),
                     _buildTextField(
                       controller: _tocController,
                       label: 'Авторы и рассказы в сборнике',
                       icon: Icons.list,
                       maxLines: 5,
-                      hintText: 'Например:\n• А. Чехов — Дама с собачкой',
                     ),
                     const SizedBox(height: 16),
 
@@ -504,14 +364,12 @@ class _AddBookScreenState extends State<AddBookScreen> {
                       controller: _locationController,
                       label: 'Где стоит (шкаф, полка)',
                       icon: Icons.location_on,
-                      hintText: 'Например: Шкаф 2, Полка 3',
                     ),
                     const SizedBox(height: 12),
                     _buildTextField(
                       controller: _coverImageController,
                       label: 'Обложка (URL)',
                       icon: Icons.image,
-                      hintText: 'https://example.com/cover.jpg',
                     ),
                     const SizedBox(height: 16),
 
@@ -560,7 +418,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _saveBook,
+                        onPressed: _saveChanges,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.teal,
                           foregroundColor: Colors.white,
@@ -571,7 +429,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
                           elevation: 4,
                         ),
                         child: const Text(
-                          '💾 Сохранить книгу',
+                          '💾 Сохранить изменения',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
